@@ -1,0 +1,33 @@
+Map.addLayer(ROI)
+Map.centerObject(ROI,10)
+
+var data=ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+var image=data.filterBounds(ROI)
+              .filterMetadata("CLOUD_COVER","less_than",5)
+              .filterDate('2022-01-01','2022-12-30')
+              .median()
+              .clip(ROI)
+Map.addLayer(image)
+var sample=water.merge(Vegetation).merge(bareland).merge(builtarea)
+print(sample)
+var bands=['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7']
+var training=image.select(bands).sampleRegions({
+  collection: sample,
+  properties: ['class'],
+  scale: 30
+});
+var dataset=training.randomColumn()
+var trainset=dataset.filter(ee.Filter.gt('random',0.8))
+var testset=dataset.filter(ee.Filter.gt('random',0.8))
+var model=ee.Classifier.smileRandomForest(150).train({
+    features: trainset,
+    classProperty:'class',
+    inputProperties:bands}) 
+
+
+// Classify the image.
+var classified = image.select(bands).classify(model);
+Map.addLayer(classified,
+             {min: 1, max: 5, palette: ['blue', 'green','orange','red']},
+             'lulc')
+
