@@ -1,0 +1,60 @@
+// Import country boundaries feature collection.
+var dataset = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017');
+
+// Filter to get the Netherlands border.
+var netherlandsBorder = dataset.filter(ee.Filter.eq('country_na', 'Netherlands'));
+
+// Print the Netherlands border feature.
+print(netherlandsBorder);
+
+// Add Netherlands outline to the map.
+Map.centerObject(netherlandsBorder);
+Map.addLayer(netherlandsBorder);
+
+// Import LST image collection.
+var modis = ee.ImageCollection('MODIS/MOD11A2');
+
+// Define a date range of interest.
+var start = ee.Date('2016-01-01');
+var dateRange = ee.DateRange(start, start.advance(6, 'year'));
+
+// Filter the LST collection for the date range.
+var mod11a2 = modis.filterDate(dateRange);
+
+// Select the 1km day LST data band and convert to Celsius.
+var modLSTc = mod11a2.select('LST_Day_1km').map(function(img) {
+  return img.multiply(0.02).subtract(273.15).copyProperties(img, ['system:time_start']);
+});
+
+// Chart time series of LST for the Netherlands.
+var ts1 = ui.Chart.image.series({
+  imageCollection: modLSTc,
+  region: netherlandsBorder,
+  reducer: ee.Reducer.mean(),
+  scale: 1000,
+  xProperty: 'system:time_start'
+}).setOptions({
+  title: 'LST 2015 Time Series',
+  vAxis: {title: 'LST Celsius'}
+});
+print(ts1);
+
+// Calculate 8-day mean temperature for the Netherlands.
+var clippedLSTc = modLSTc.mean().clip(netherlandsBorder);
+
+// Add the mean temperature layer to the map.
+Map.addLayer(clippedLSTc, {
+  min: 0,
+  max: 30,
+  palette: ['blue', 'limegreen', 'yellow', 'darkorange', 'red']
+}, 'Mean temperature, 2015');
+
+// Export the image to Google Drive.
+Export.image.toDrive({
+  image: clippedLSTc,
+  description: 'LST_Net2016_200',
+  folder: 'my_folder',
+  region: netherlandsBorder,
+  scale: 200,
+  crs: 'EPSG:4326'
+});
